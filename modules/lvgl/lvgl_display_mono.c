@@ -81,6 +81,35 @@ static void lvgl_transform_buffer(uint8_t **px_map, uint32_t width, uint32_t hei
 	memcpy(src_buf, mono_conv_buf, mono_conv_buf_size - COLOR_PALETTE_HEADER_SIZE);
 }
 
+#if defined(CONFIG_LV_Z_DIRECT_RENDERING)
+
+void lvgl_flush_cb_mono(lv_display_t *display, const lv_area_t *area, uint8_t *px_map)
+{
+	struct lvgl_disp_data *data = (struct lvgl_disp_data *)lv_display_get_user_data(display);
+
+	/* Ignore partial flushes in direct rendering mode */
+	if (lv_display_flush_is_last(display) == false) {
+		return;
+	}
+
+	uint16_t w = lv_display_get_original_horizontal_resolution(display);
+	uint16_t h = lv_display_get_original_vertical_resolution(display);
+
+	lvgl_transform_buffer(&px_map, w, h, &data->cap);
+
+	struct display_buffer_descriptor desc = {.buf_size = (w * h) / 8U,
+						 .width = w,
+						 .pitch = w,
+						 .height = h,
+						 .frame_incomplete = false};
+
+	display_write(data->display_dev, 0, 0, &desc, (void *)px_map);
+
+	lv_display_flush_ready(display);
+}
+
+#else
+
 void lvgl_flush_cb_mono(lv_display_t *display, const lv_area_t *area, uint8_t *px_map)
 {
 	uint16_t w = area->x2 - area->x1 + 1;
@@ -127,6 +156,8 @@ void lvgl_flush_cb_mono(lv_display_t *display, const lv_area_t *area, uint8_t *p
 
 	lv_display_flush_ready(display);
 }
+
+#endif /* CONFIG_LV_Z_DIRECT_RENDERING */
 
 void lvgl_rounder_cb_mono(lv_event_t *e)
 {
